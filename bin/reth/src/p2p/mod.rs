@@ -186,3 +186,74 @@ impl Command {
         Ok(())
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, error::Error, path::PathBuf, net::Ipv4Addr};
+
+    use reth_config::Config;
+    use reth_db::{open_db};
+    use reth_discv4::{DEFAULT_DISCOVERY_PORT, DEFAULT_DISCOVERY_ADDR};
+    use reth_interfaces::db::LogLevel;
+    use reth_primitives::{ChainSpec, ChainSpecBuilder};
+    use reth_rpc_types::NodeRecord;
+
+    use crate::dirs::{MaybePlatformPath, PlatformPath, DataDirPath};
+    use super::*;
+
+    #[tokio::test]
+    async fn get_header() {
+        let tempdir = tempfile::TempDir::new().unwrap();
+        let noop_db = Arc::new(open_db(&tempdir.into_path(), Some(LogLevel::Trace)).unwrap());
+
+        let chain = Arc::new(ChainSpecBuilder::mainnet().build());
+        
+        // add network name to data dir
+        let data_dir = MaybePlatformPath::<DataDirPath>::default().unwrap_or_chain_default(chain.chain);
+        let config_path = data_dir.config_path();
+        let mut config: Config = confy::load_path(&config_path).unwrap_or_default();
+
+        // let url = "enode://f22c7ba88f00fa95ba9f82caee230a53f49086449b54880ea69a4ba2faba83de6b68f9a47cd21002f557c89658ea8e88346b8ee4137fdd1cd25b6ac3ef2ea56d@127.0.0.1:30303?discport=30301";
+        // let node: NodeRecord = url.parse().unwrap();
+        // // if let Some(peer) = self.trusted_peer {
+        //     config.peers.trusted_nodes.insert(node);
+        // }
+
+        let trusted_only = false;
+        if config.peers.trusted_nodes.is_empty() && trusted_only {
+            println!("No trusted nodes. Set trusted peer with `--trusted-peer <enode record>` or set `--trusted-only` to `false`");
+        }
+
+        config.peers.connect_trusted_nodes_only = trusted_only;
+
+        let default_secret_key_path = data_dir.p2p_secret_path();
+        let p2p_secret_key = get_secret_key(&default_secret_key_path).unwrap();
+
+        let mut network_config_builder =
+            config.network_config(NatResolver::Any, None, p2p_secret_key).chain_spec(chain.clone());
+
+            let discovery = DiscoveryArgs {
+                disable_discovery: false,
+                disable_discv4_discovery: false,
+                disable_dns_discovery: false,
+                addr: DEFAULT_DISCOVERY_ADDR,
+                port: DEFAULT_DISCOVERY_PORT,
+            };
+        network_config_builder = discovery.apply_to_builder(network_config_builder);
+
+        let network = network_config_builder
+            .build(Arc::new(ProviderFactory::new(noop_db, chain.clone())))
+            .start_network()
+            .await.unwrap();
+
+        let fetch_client = network.fetch_client().await.unwrap();
+        let retries = 5;
+        let backoff = ConstantBuilder::default().with_max_times(retries);
+        let header = (move || get_single_header(fetch_client.clone(), BlockHashOrNumber::Number(18476854))).retry(&backoff)
+        .notify(|err, _| println!("Error requesting header: {err}. Retrying..."))
+        .await.unwrap();
+    
+        println!("Successfully downloaded header: {header:?}");
+    }
+}
