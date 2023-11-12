@@ -196,7 +196,7 @@ where
         discovery_v4_config = discovery_v4_config.map(|mut disc_config| {
             // merge configured boot nodes
             disc_config.bootstrap_nodes.extend(boot_nodes.clone());
-            disc_config.add_eip868_pair("eth", status.forkid);
+            // disc_config.add_eip868_pair("eth", status.forkid);
             disc_config
         });
 

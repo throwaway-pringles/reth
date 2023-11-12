@@ -2,7 +2,7 @@
 use crate::{
     errors::P2PStreamError, version::ParseVersionError, DisconnectReason, EthMessageID, EthVersion,
 };
-use reth_primitives::{Chain, ValidationError, B256};
+use reth_primitives::{Chain, ValidationError, B256, U256};
 use std::io;
 
 /// Errors when sending/receiving messages
@@ -72,6 +72,8 @@ pub enum EthHandshakeError {
     MismatchedGenesis { expected: B256, got: B256 },
     #[error("mismatched protocol version in status message: got {got}, expected {expected}")]
     MismatchedProtocolVersion { expected: u8, got: u8 },
+    #[error("mismatched network in status message: got {got}, expected {expected}")]
+    MismatchedNetworkId { expected: U256, got: U256 },
     #[error("mismatched chain in status message: got {got}, expected {expected}")]
     MismatchedChain { expected: Chain, got: Chain },
     #[error("total difficulty bitlen is too large: got {got}, maximum {maximum}")]

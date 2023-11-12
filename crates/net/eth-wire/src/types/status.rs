@@ -2,9 +2,9 @@ use crate::{EthVersion, StatusBuilder};
 use alloy_rlp::{RlpDecodable, RlpEncodable};
 use reth_codecs::derive_arbitrary;
 use reth_primitives::{
-    hex, Chain, ChainSpec, ForkId, Genesis, Hardfork, Head, NamedChain, B256, MAINNET, U256,
+    hex::{self, FromHex}, Chain, ChainSpec, ForkId, Genesis, Hardfork, Head, NamedChain, B256, MAINNET, U256,
 };
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, str::FromStr};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -22,9 +22,7 @@ pub struct Status {
     /// 66.
     pub version: u8,
 
-    /// The chain id, as introduced in
-    /// [EIP155](https://eips.ethereum.org/EIPS/eip-155#list-of-chain-ids).
-    pub chain: Chain,
+    pub network_id: U256,
 
     /// Total difficulty of the best chain.
     pub total_difficulty: U256,
@@ -34,13 +32,10 @@ pub struct Status {
 
     /// The genesis hash of the peer's chain.
     pub genesis: B256,
-
-    /// The fork identifier, a [CRC32
-    /// checksum](https://en.wikipedia.org/wiki/Cyclic_redundancy_check#CRC-32_algorithm) for
-    /// identifying the peer's fork as defined by
-    /// [EIP-2124](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2124.md).
-    /// This was added in [`eth/64`](https://eips.ethereum.org/EIPS/eip-2364)
-    pub forkid: ForkId,
+    
+    /// The chain id, as introduced in
+    /// [EIP155](https://eips.ethereum.org/EIPS/eip-155#list-of-chain-ids).
+    pub chain: Chain
 }
 
 impl From<Genesis> for Status {
@@ -51,11 +46,11 @@ impl From<Genesis> for Status {
 
         Status {
             version: EthVersion::Eth68 as u8,
+            network_id: U256::try_from(8217).unwrap(), // klaytn network id
+            total_difficulty: total_difficulty,
+            blockhash: chainspec.genesis_hash(), // B256::from_str("f0c92ad6febf39a3a21e5602dc89ddd93dd93ffd9a4a97e270950c08c98d03a8").unwrap(),
+            genesis: chainspec.genesis_hash(), // B256::from_str("c72e5293c3c3ba38ed8ae910f780e4caaa9fb95e79784f7ab74c3c262ea7137e").unwrap(),
             chain: Chain::Id(chain),
-            total_difficulty,
-            blockhash: chainspec.genesis_hash(),
-            genesis: chainspec.genesis_hash(),
-            forkid: chainspec.fork_id(&Head::default()),
         }
     }
 }
@@ -72,11 +67,11 @@ impl Status {
     /// and head.
     pub fn spec_builder(spec: &ChainSpec, head: &Head) -> StatusBuilder {
         Self::builder()
-            .chain(spec.chain)
+            .networkid(U256::try_from(8217).unwrap())// klaytn network id
             .genesis(spec.genesis_hash())
             .blockhash(head.hash)
             .total_difficulty(head.total_difficulty)
-            .forkid(spec.fork_id(head))
+            .chain(spec.chain)
     }
 }
 
@@ -88,11 +83,11 @@ impl Display for Status {
             f,
             "Status {{ version: {}, chain: {}, total_difficulty: {}, blockhash: {}, genesis: {}, forkid: {:X?} }}",
             self.version,
-            self.chain,
+            self.network_id,
             self.total_difficulty,
             hexed_blockhash,
             hexed_genesis,
-            self.forkid
+            self.chain
         )
     }
 }
@@ -106,22 +101,22 @@ impl Debug for Status {
                 f,
                 "Status {{\n\tversion: {:?},\n\tchain: {:?},\n\ttotal_difficulty: {:?},\n\tblockhash: {},\n\tgenesis: {},\n\tforkid: {:X?}\n}}",
                 self.version,
-                self.chain,
+                self.network_id,
                 self.total_difficulty,
                 hexed_blockhash,
                 hexed_genesis,
-                self.forkid
+                self.chain
             )
         } else {
             write!(
                 f,
                 "Status {{ version: {:?}, chain: {:?}, total_difficulty: {:?}, blockhash: {}, genesis: {}, forkid: {:X?} }}",
                 self.version,
-                self.chain,
+                self.network_id,
                 self.total_difficulty,
                 hexed_blockhash,
                 hexed_genesis,
-                self.forkid
+                self.chain
             )
         }
     }
@@ -133,13 +128,11 @@ impl Default for Status {
         let mainnet_genesis = MAINNET.genesis_hash();
         Status {
             version: EthVersion::Eth68 as u8,
-            chain: Chain::Named(NamedChain::Mainnet),
+            network_id: U256::try_from(8217).unwrap(),
             total_difficulty: U256::from(17_179_869_184u64),
             blockhash: mainnet_genesis,
             genesis: mainnet_genesis,
-            forkid: Hardfork::Frontier
-                .fork_id(&MAINNET)
-                .expect("The Frontier hardfork should always exist"),
+            chain: Chain::Named(NamedChain::Mainnet),
         }
     }
 }
@@ -160,7 +153,7 @@ mod tests {
         let expected = hex!("f85643018a07aac59dabcdd74bc567a0feb27336ca7923f8fab3bd617fcb6e75841538f71c1bcfc267d7838489d9e13da0d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3c684b715077d80");
         let status = Status {
             version: EthVersion::Eth67 as u8,
-            chain: Chain::Named(NamedChain::Mainnet),
+            network_id: U256::try_from(8217).unwrap(),
             total_difficulty: U256::from(36206751599115524359527u128),
             blockhash: B256::from_str(
                 "feb27336ca7923f8fab3bd617fcb6e75841538f71c1bcfc267d7838489d9e13d",
@@ -170,7 +163,7 @@ mod tests {
                 "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
             )
             .unwrap(),
-            forkid: ForkId { hash: ForkHash([0xb7, 0x15, 0x07, 0x7d]), next: 0 },
+            chain: Chain::Named(NamedChain::Mainnet),
         };
 
         let mut rlp_status = vec![];
@@ -183,7 +176,7 @@ mod tests {
         let data = hex!("f85643018a07aac59dabcdd74bc567a0feb27336ca7923f8fab3bd617fcb6e75841538f71c1bcfc267d7838489d9e13da0d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3c684b715077d80");
         let expected = Status {
             version: EthVersion::Eth67 as u8,
-            chain: Chain::Named(NamedChain::Mainnet),
+            network_id: U256::try_from(8217).unwrap(),
             total_difficulty: U256::from(36206751599115524359527u128),
             blockhash: B256::from_str(
                 "feb27336ca7923f8fab3bd617fcb6e75841538f71c1bcfc267d7838489d9e13d",
@@ -193,7 +186,7 @@ mod tests {
                 "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
             )
             .unwrap(),
-            forkid: ForkId { hash: ForkHash([0xb7, 0x15, 0x07, 0x7d]), next: 0 },
+            chain: Chain::Named(NamedChain::Mainnet),
         };
         let status = Status::decode(&mut &data[..]).unwrap();
         assert_eq!(status, expected);
@@ -204,7 +197,7 @@ mod tests {
         let expected = hex!("f850423884024190faa0f8514c4680ef27700751b08f37645309ce65a449616a3ea966bf39dd935bb27ba00d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5bc6845d43d2fd80");
         let status = Status {
             version: EthVersion::Eth66 as u8,
-            chain: Chain::Named(NamedChain::BinanceSmartChain),
+            network_id: U256::try_from(8217).unwrap(),
             total_difficulty: U256::from(37851386u64),
             blockhash: B256::from_str(
                 "f8514c4680ef27700751b08f37645309ce65a449616a3ea966bf39dd935bb27b",
@@ -214,7 +207,7 @@ mod tests {
                 "0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b",
             )
             .unwrap(),
-            forkid: ForkId { hash: ForkHash([0x5d, 0x43, 0xd2, 0xfd]), next: 0 },
+            chain: Chain::Named(NamedChain::BinanceSmartChain),
         };
 
         let mut rlp_status = vec![];
@@ -227,7 +220,7 @@ mod tests {
         let data = hex!("f850423884024190faa0f8514c4680ef27700751b08f37645309ce65a449616a3ea966bf39dd935bb27ba00d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5bc6845d43d2fd80");
         let expected = Status {
             version: EthVersion::Eth66 as u8,
-            chain: Chain::Named(NamedChain::BinanceSmartChain),
+            network_id: U256::try_from(8217).unwrap(),
             total_difficulty: U256::from(37851386u64),
             blockhash: B256::from_str(
                 "f8514c4680ef27700751b08f37645309ce65a449616a3ea966bf39dd935bb27b",
@@ -237,7 +230,7 @@ mod tests {
                 "0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b",
             )
             .unwrap(),
-            forkid: ForkId { hash: ForkHash([0x5d, 0x43, 0xd2, 0xfd]), next: 0 },
+            chain: Chain::Named(NamedChain::BinanceSmartChain),
         };
         let status = Status::decode(&mut &data[..]).unwrap();
         assert_eq!(status, expected);
@@ -248,7 +241,7 @@ mod tests {
         let data = hex!("f86142820834936d68fcffffffffffffffffffffffffdeab81b8a0523e8163a6d620a4cc152c547a05f28a03fec91a2a615194cb86df9731372c0ca06499dccdc7c7def3ebb1ce4c6ee27ec6bd02aee570625ca391919faf77ef27bdc6841a67ccd880");
         let expected = Status {
             version: EthVersion::Eth66 as u8,
-            chain: Chain::Id(2100),
+            network_id: U256::try_from(8217).unwrap(),
             total_difficulty: U256::from_str(
                 "0x000000000000000000000000006d68fcffffffffffffffffffffffffdeab81b8",
             )
@@ -261,7 +254,7 @@ mod tests {
                 "6499dccdc7c7def3ebb1ce4c6ee27ec6bd02aee570625ca391919faf77ef27bd",
             )
             .unwrap(),
-            forkid: ForkId { hash: ForkHash([0x1a, 0x67, 0xcc, 0xd8]), next: 0 },
+            chain: Chain::Id(2100),
         };
         let status = Status::decode(&mut &data[..]).unwrap();
         assert_eq!(status, expected);
@@ -314,12 +307,10 @@ mod tests {
             }
         }
 
-        let forkid = ForkId { hash: forkhash, next: 0 };
-
         let status = Status::spec_builder(&spec, &head).build();
 
         assert_eq!(status.chain, Chain::Id(1337));
-        assert_eq!(status.forkid, forkid);
+        assert_eq!(status.network_id, U256::try_from(8217).unwrap(),);
         assert_eq!(status.total_difficulty, total_difficulty);
         assert_eq!(status.blockhash, head_hash);
         assert_eq!(status.genesis, genesis_hash);
