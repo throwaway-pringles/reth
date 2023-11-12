@@ -1,6 +1,6 @@
 //! All capability related types
 
-use crate::{version::ParseVersionError, EthMessage, EthVersion};
+use crate::{version::{ParseVersionError, IstanbulVersion}, EthMessage, EthVersion};
 use alloy_rlp::{Decodable, Encodable, RlpDecodable, RlpEncodable};
 use reth_codecs::add_arbitrary_tests;
 use reth_primitives::bytes::{BufMut, Bytes};
@@ -186,7 +186,7 @@ impl Decodable for Capabilities {
 pub enum SharedCapability {
     /// The `eth` capability.
     Eth { version: EthVersion, offset: u8 },
-
+    Istanbul { version: IstanbulVersion, offset: u8 },
     /// An unknown capability.
     UnknownCapability { name: String, version: u8, offset: u8 },
 }
@@ -196,6 +196,7 @@ impl SharedCapability {
     pub(crate) fn new(name: &str, version: u8, offset: u8) -> Result<Self, SharedCapabilityError> {
         match name {
             "eth" => Ok(Self::Eth { version: EthVersion::try_from(version)?, offset }),
+            "istanbul" => Ok(Self::Istanbul { version: IstanbulVersion::try_from(version)?, offset }),
             _ => Ok(Self::UnknownCapability { name: name.into(), version, offset }),
         }
     }
@@ -204,6 +205,7 @@ impl SharedCapability {
     pub fn name(&self) -> &str {
         match self {
             SharedCapability::Eth { .. } => "eth",
+            SharedCapability::Istanbul { .. } => "istanbul",
             SharedCapability::UnknownCapability { name, .. } => name,
         }
     }
@@ -212,6 +214,7 @@ impl SharedCapability {
     pub fn version(&self) -> u8 {
         match self {
             SharedCapability::Eth { version, .. } => *version as u8,
+            SharedCapability::Istanbul { version, .. } => *version as u8,
             SharedCapability::UnknownCapability { version, .. } => *version,
         }
     }
@@ -220,6 +223,7 @@ impl SharedCapability {
     pub fn offset(&self) -> u8 {
         match self {
             SharedCapability::Eth { offset, .. } => *offset,
+            SharedCapability::Istanbul { offset, .. } => *offset,
             SharedCapability::UnknownCapability { offset, .. } => *offset,
         }
     }
@@ -228,6 +232,7 @@ impl SharedCapability {
     pub fn num_messages(&self) -> Result<u8, SharedCapabilityError> {
         match self {
             SharedCapability::Eth { version, .. } => Ok(version.total_messages()),
+            SharedCapability::Istanbul { version, .. } => Ok(version.total_messages()),
             _ => Err(SharedCapabilityError::UnknownCapability),
         }
     }

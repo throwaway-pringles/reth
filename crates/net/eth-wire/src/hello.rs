@@ -22,9 +22,11 @@ pub struct HelloMessage {
     /// The list of supported capabilities and their versions.
     pub capabilities: Vec<Capability>,
     /// The port that the client is listening on, zero indicates the client is not listening.
-    pub port: u16,
+    pub port: Vec<u16>,
     /// The secp256k1 public key corresponding to the node's private key.
     pub id: PeerId,
+    /// Flag for multi_channel in klaytn
+    pub multi_channel: bool,
 }
 
 // === impl HelloMessage ===
@@ -55,9 +57,11 @@ pub struct HelloMessageBuilder {
     /// The list of supported capabilities and their versions.
     pub capabilities: Option<Vec<Capability>>,
     /// The port that the client is listening on, zero indicates the client is not listening.
-    pub port: Option<u16>,
+    pub port: Option<Vec<u16>>,
     /// The secp256k1 public key corresponding to the node's private key.
     pub id: PeerId,
+    /// Flag for multi_channel in klaytn
+    pub multi_channel: bool, 
 }
 
 // === impl HelloMessageBuilder ===
@@ -65,11 +69,11 @@ pub struct HelloMessageBuilder {
 impl HelloMessageBuilder {
     /// Create a new builder to configure a [`HelloMessage`]
     pub fn new(id: PeerId) -> Self {
-        Self { protocol_version: None, client_version: None, capabilities: None, port: None, id }
+        Self { protocol_version: None, client_version: None, capabilities: None, port: None, id, multi_channel: false }
     }
 
     /// Sets the port the client is listening on
-    pub fn port(mut self, port: u16) -> Self {
+    pub fn port(mut self, port: Vec<u16>) -> Self {
         self.port = Some(port);
         self
     }
@@ -94,15 +98,17 @@ impl HelloMessageBuilder {
 
     /// Consumes the type and returns the configured [`HelloMessage`]
     pub fn build(self) -> HelloMessage {
-        let Self { protocol_version, client_version, capabilities, port, id } = self;
+        let Self { protocol_version, client_version, capabilities, port, id , multi_channel } = self;
+        
+        // Manually create capabilities
+        let caps = capabilities.unwrap_or_else(|| { vec![Capability { name: "istanbul".to_string(), version: 65 }, Capability { name: "istanbul".to_string(), version: 64 }] });
         HelloMessage {
             protocol_version: protocol_version.unwrap_or_default(),
             client_version: client_version.unwrap_or_else(|| RETH_CLIENT_VERSION.to_string()),
-            capabilities: capabilities.unwrap_or_else(|| {
-                vec![EthVersion::Eth68.into(), EthVersion::Eth67.into(), EthVersion::Eth66.into()]
-            }),
-            port: port.unwrap_or(DEFAULT_DISCOVERY_PORT),
+            capabilities: caps,
+            port: port.unwrap_or(vec![DEFAULT_DISCOVERY_PORT]),
             id,
+            multi_channel
         }
     }
 }
@@ -113,6 +119,7 @@ mod tests {
     use reth_discv4::DEFAULT_DISCOVERY_PORT;
     use reth_ecies::util::pk2id;
     use secp256k1::{SecretKey, SECP256K1};
+    use test_fuzz::runtime::num_traits::ToPrimitive;
 
     use crate::{
         capability::Capability, p2pstream::P2PMessage, EthVersion, HelloMessage, ProtocolVersion,
@@ -126,8 +133,9 @@ mod tests {
             protocol_version: ProtocolVersion::V5,
             client_version: "reth/0.1.0".to_string(),
             capabilities: vec![Capability::new("eth".into(), EthVersion::Eth67 as usize)],
-            port: DEFAULT_DISCOVERY_PORT,
+            port: vec![DEFAULT_DISCOVERY_PORT],
             id,
+            multi_channel: false,
         });
 
         let mut hello_encoded = Vec::new();
@@ -146,8 +154,9 @@ mod tests {
             protocol_version: ProtocolVersion::V5,
             client_version: "reth/0.1.0".to_string(),
             capabilities: vec![Capability::new("eth".into(), EthVersion::Eth67 as usize)],
-            port: DEFAULT_DISCOVERY_PORT,
+            port: vec![DEFAULT_DISCOVERY_PORT],
             id,
+            multi_channel: false,
         });
 
         let mut hello_encoded = Vec::new();
@@ -165,8 +174,9 @@ mod tests {
             protocol_version: ProtocolVersion::V5,
             client_version: "reth/0.1.0".to_string(),
             capabilities: vec![Capability::new("eth".into(), EthVersion::Eth67 as usize)],
-            port: DEFAULT_DISCOVERY_PORT,
+            port: vec![DEFAULT_DISCOVERY_PORT],
             id,
+            multi_channel: false,
         });
 
         let mut hello_encoded = Vec::new();

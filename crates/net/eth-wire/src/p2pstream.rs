@@ -96,6 +96,7 @@ where
     ) -> Result<(P2PStream<S>, HelloMessage), P2PStreamError> {
         trace!(?hello, "sending p2p hello to peer");
 
+        let clonedHello = hello.clone();
         // send our hello message with the Sink
         let mut raw_hello_bytes = BytesMut::new();
         P2PMessage::Hello(hello.clone()).encode(&mut raw_hello_bytes);
@@ -159,7 +160,7 @@ where
 
         // determine shared capabilities (currently returns only one capability)
         let capability_res =
-            set_capability_offsets(hello.capabilities, their_hello.capabilities.clone());
+            set_capability_offsets(clonedHello.capabilities, their_hello.capabilities.clone());
 
         let shared_capability = match capability_res {
             Err(err) => {
@@ -647,6 +648,12 @@ pub fn set_capability_offsets(
 
                 shared_with_offsets.push(shared_capability);
             }
+            SharedCapability::Istanbul { .. } => {
+                // increment the offset if the capability is known
+                offset += shared_capability.num_messages()?;
+
+                shared_with_offsets.push(shared_capability);
+            }
         }
     }
 
@@ -861,8 +868,9 @@ mod tests {
             protocol_version: ProtocolVersion::V5,
             client_version: "bitcoind/1.0.0".to_string(),
             capabilities: vec![EthVersion::Eth67.into()],
-            port: DEFAULT_DISCOVERY_PORT,
+            port: vec![DEFAULT_DISCOVERY_PORT],
             id: pk2id(&server_key.public_key(SECP256K1)),
+            multi_channel: false,
         };
         (hello, server_key)
     }
