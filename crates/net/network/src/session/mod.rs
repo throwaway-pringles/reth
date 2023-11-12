@@ -805,7 +805,12 @@ async fn authenticate(
     hello: HelloMessage,
     status: Status,
     fork_filter: ForkFilter,
-) {
+) {    
+    // ConnType handshake
+    let _ = stream.write_u8(2).await;
+    let n = stream.read_u8().await;
+    println!("Received ConnType: {:?}", n);
+
     let local_addr = stream.inner().local_addr().ok();
     let stream = match get_eciess_stream(stream, secret_key, direction).await {
         Ok(stream) => stream,
