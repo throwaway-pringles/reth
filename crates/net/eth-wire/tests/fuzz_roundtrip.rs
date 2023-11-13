@@ -99,6 +99,7 @@ pub mod fuzz_rlp {
                 protocol_version: Default::default(),
                 id: Default::default(),
                 port: Default::default(),
+                multi_channel: false,
             })
         }
     }

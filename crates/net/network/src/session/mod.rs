@@ -10,7 +10,7 @@ use reth_ecies::{stream::ECIESStream, ECIESError};
 use reth_eth_wire::{
     capability::{Capabilities, CapabilityMessage},
     errors::EthStreamError,
-    DisconnectReason, EthVersion, HelloMessage, Status, UnauthedEthStream, UnauthedP2PStream,
+    DisconnectReason, EthVersion, HelloMessage, Status, UnauthedEthStream, UnauthedP2PStream, P2PStream,
 };
 use reth_metrics::common::mpsc::MeteredPollSender;
 use reth_net_common::{
@@ -29,7 +29,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt, AsyncReadExt},
     net::TcpStream,
     sync::{mpsc, oneshot},
 };
@@ -184,7 +184,6 @@ impl SessionManager {
         self.status.blockhash = head.hash;
         self.status.total_difficulty = head.total_difficulty;
         let transition = self.fork_filter.set_head(head);
-        self.status.forkid = self.fork_filter.current();
         transition
     }
 
@@ -797,7 +796,7 @@ async fn start_pending_outbound_session(
 async fn authenticate(
     disconnect_rx: oneshot::Receiver<()>,
     events: mpsc::Sender<PendingSessionEvent>,
-    stream: MeteredStream<TcpStream>,
+    mut stream: MeteredStream<TcpStream>,
     session_id: SessionId,
     remote_addr: SocketAddr,
     secret_key: SecretKey,
@@ -805,7 +804,12 @@ async fn authenticate(
     hello: HelloMessage,
     status: Status,
     fork_filter: ForkFilter,
-) {
+) {    
+    // ConnType handshake
+    let _ = stream.write_u8(2).await;
+    let n = stream.read_u8().await;
+    println!("Received ConnType: {:?}", n);
+
     let local_addr = stream.inner().local_addr().ok();
     let stream = match get_eciess_stream(stream, secret_key, direction).await {
         Ok(stream) => stream,
@@ -822,6 +826,7 @@ async fn authenticate(
         }
     };
 
+    println!("Completed ECIES Handshake");
     let unauthed = UnauthedP2PStream::new(stream);
 
     let auth = authenticate_stream(
@@ -836,6 +841,7 @@ async fn authenticate(
     )
     .boxed();
 
+    println!("Authenticated");
     match futures::future::select(disconnect_rx, auth).await {
         Either::Left((_, _)) => {
             let _ = events
@@ -911,6 +917,7 @@ async fn authenticate_stream(
             }
         }
     };
+    println!("Completed Eth Handshake");
     PendingSessionEvent::Established {
         session_id,
         remote_addr,

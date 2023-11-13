@@ -2,7 +2,7 @@ use crate::{
     errors::{EthHandshakeError, EthStreamError},
     message::{EthBroadcastMessage, ProtocolBroadcastMessage},
     types::{EthMessage, ProtocolMessage, Status},
-    CanDisconnect, DisconnectReason, EthVersion,
+    CanDisconnect, DisconnectReason, EthVersion, version::IstanbulVersion,
 };
 use alloy_rlp::Encodable;
 use futures::{ready, Sink, SinkExt, StreamExt};
@@ -100,7 +100,9 @@ where
                     status=%resp,
                     "validating incoming eth status from peer"
                 );
-                if status.genesis != resp.genesis {
+
+                // Skip validation
+                if false && status.genesis != resp.genesis {
                     self.inner.disconnect(DisconnectReason::ProtocolBreach).await?;
                     return Err(EthHandshakeError::MismatchedGenesis {
                         expected: status.genesis,
@@ -118,7 +120,8 @@ where
                     .into())
                 }
 
-                if status.chain != resp.chain {
+                // Skip validation
+                if false && status.chain != resp.chain {
                     self.inner.disconnect(DisconnectReason::ProtocolBreach).await?;
                     return Err(EthHandshakeError::MismatchedChain {
                         expected: status.chain,
@@ -138,11 +141,14 @@ where
                     .into())
                 }
 
-                if let Err(err) =
-                    fork_filter.validate(resp.forkid).map_err(EthHandshakeError::InvalidFork)
-                {
+                
+                if status.network_id != resp.network_id {
                     self.inner.disconnect(DisconnectReason::ProtocolBreach).await?;
-                    return Err(err.into())
+                    return Err(EthHandshakeError::MismatchedNetworkId {
+                        expected: status.network_id,
+                        got: resp.network_id,
+                    }
+                    .into())
                 }
 
                 // now we can create the `EthStream` because the peer has successfully completed
@@ -342,7 +348,7 @@ mod tests {
             blockhash: B256::random(),
             genesis,
             // Pass the current fork id.
-            forkid: fork_filter.current(),
+            network_id: U256::from(8217),
         };
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -389,7 +395,7 @@ mod tests {
             blockhash: B256::random(),
             genesis,
             // Pass the current fork id.
-            forkid: fork_filter.current(),
+            network_id: U256::from(8217),
         };
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -436,7 +442,7 @@ mod tests {
             blockhash: B256::random(),
             genesis,
             // Pass the current fork id.
-            forkid: fork_filter.current(),
+            network_id: U256::from(8217),
         };
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -577,7 +583,7 @@ mod tests {
             blockhash: B256::random(),
             genesis,
             // Pass the current fork id.
-            forkid: fork_filter.current(),
+            network_id: U256::from(8217),
         };
 
         let status_copy = status;
@@ -592,8 +598,9 @@ mod tests {
                 protocol_version: ProtocolVersion::V5,
                 client_version: "bitcoind/1.0.0".to_string(),
                 capabilities: vec![Capability::new("eth".into(), EthVersion::Eth67 as usize)],
-                port: DEFAULT_DISCOVERY_PORT,
+                port: vec![DEFAULT_DISCOVERY_PORT],
                 id: pk2id(&server_key.public_key(SECP256K1)),
+                multi_channel: false,
             };
 
             let unauthed_stream = UnauthedP2PStream::new(stream);
@@ -620,8 +627,9 @@ mod tests {
             protocol_version: ProtocolVersion::V5,
             client_version: "bitcoind/1.0.0".to_string(),
             capabilities: vec![Capability::new("eth".into(), EthVersion::Eth67 as usize)],
-            port: DEFAULT_DISCOVERY_PORT,
             id: pk2id(&client_key.public_key(SECP256K1)),
+            port: vec![DEFAULT_DISCOVERY_PORT],
+            multi_channel: false,
         };
 
         let unauthed_stream = UnauthedP2PStream::new(sink);

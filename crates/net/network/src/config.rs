@@ -377,7 +377,7 @@ impl NetworkConfigBuilder {
 
         let mut hello_message =
             hello_message.unwrap_or_else(|| HelloMessage::builder(peer_id).build());
-        hello_message.port = listener_addr.port();
+        hello_message.port = vec![listener_addr.port()];
 
         let head = head.unwrap_or(Head {
             hash: chain_spec.genesis_hash(),
@@ -475,30 +475,4 @@ mod tests {
         assert_eq!(bootstrap_nodes.len(), 1);
     }
 
-    #[test]
-    fn test_network_fork_filter_default() {
-        let mut chain_spec = Arc::clone(&MAINNET);
-
-        // remove any `next` fields we would have by removing all hardforks
-        Arc::make_mut(&mut chain_spec).hardforks = BTreeMap::new();
-
-        // check that the forkid is initialized with the genesis and no other forks
-        let genesis_fork_hash = ForkHash::from(chain_spec.genesis_hash());
-
-        // enforce that the fork_id set in the status is consistent with the generated fork filter
-        let config = builder().chain_spec(chain_spec).build(NoopProvider::default());
-
-        let status = config.status;
-        let fork_filter = config.fork_filter;
-
-        // assert that there are no other forks
-        assert_eq!(status.forkid.next, 0);
-
-        // assert the same thing for the fork_filter
-        assert_eq!(fork_filter.current().next, 0);
-
-        // check status and fork_filter forkhash
-        assert_eq!(status.forkid.hash, genesis_fork_hash);
-        assert_eq!(fork_filter.current().hash, genesis_fork_hash);
-    }
 }

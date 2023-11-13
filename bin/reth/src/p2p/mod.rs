@@ -208,7 +208,7 @@ mod tests {
     #[tokio::test]
     async fn get_header() {
         let tempdir = tempfile::TempDir::new().unwrap();
-        let noop_db = Arc::new(open_db(&tempdir.into_path(), Some(LogLevel::Trace)).unwrap());
+        let noop_db = Arc::new(open_db(&tempdir.into_path(), Some(LogLevel::Extra)).unwrap());
 
         let chain = Arc::new(ChainSpecBuilder::mainnet().build());
         
@@ -217,15 +217,11 @@ mod tests {
         let config_path = data_dir.config_path();
         let mut config: Config = confy::load_path(&config_path).unwrap_or_default();
 
+        let url = "enode://de17b9b71f546d1f58925b514d6b0125c27f99fb2d88c0b120502e3e9e811755aac03045ca4a3dd8461d98910db9556f55ffcadca4e9e7b8a8d1e0e27a900898@221.147.140.205:32323";
+        let node: NodeRecord = url.parse().unwrap();
+        config.peers.trusted_nodes.insert(node); // Add enode to trusted node
 
-        // Only use discovery
-        // let url = "enode://f22c7ba88f00fa95ba9f82caee230a53f49086449b54880ea69a4ba2faba83de6b68f9a47cd21002f557c89658ea8e88346b8ee4137fdd1cd25b6ac3ef2ea56d@127.0.0.1:30303?discport=30301";
-        // let node: NodeRecord = url.parse().unwrap();
-        // // if let Some(peer) = self.trusted_peer {
-        //     config.peers.trusted_nodes.insert(node);
-        // }
-        
-        let trusted_only = false;
+        let trusted_only = true;
         if config.peers.trusted_nodes.is_empty() && trusted_only {
             println!("No trusted nodes. Set trusted peer with `--trusted-peer <enode record>` or set `--trusted-only` to `false`");
         }

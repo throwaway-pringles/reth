@@ -77,9 +77,8 @@ impl StatusBuilder {
         self
     }
 
-    /// Sets the fork id.
-    pub fn forkid(mut self, forkid: ForkId) -> Self {
-        self.status.forkid = forkid;
+    pub fn networkid(mut self, networkid: U256) -> Self {
+        self.status.network_id = networkid;
         self
     }
 }
@@ -100,8 +99,9 @@ impl HelloBuilder {
                 // TODO: proper client versioning
                 client_version: "Ethereum/1.0.0".to_string(),
                 capabilities: vec![EthVersion::Eth68.into()],
-                port: DEFAULT_DISCOVERY_PORT,
+                port: vec![DEFAULT_DISCOVERY_PORT],
                 id: pubkey,
+                multi_channel: false, 
             },
         }
     }
@@ -130,7 +130,7 @@ impl HelloBuilder {
     }
 
     /// Sets the port.
-    pub fn port(mut self, port: u16) -> Self {
+    pub fn port(mut self, port: Vec<u16>) -> Self {
         self.hello.port = port;
         self
     }
